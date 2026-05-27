@@ -1,0 +1,89 @@
+// file: backend/prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider                  = "prisma-client-py"
+  interface                 = "asyncio"
+  recursive_type_depth      = -1
+  enable_experimental_decimal = true
+}
+
+model User {
+  discord_id        String              @id @db.VarChar(64)
+  username          String              @db.VarChar(100)
+  experience_points BigInt              @default(0)
+  player_class      String              @default("Adventurer") @db.VarChar(30)
+  gold_balance      Decimal             @default(100.00) @db.Decimal(15, 2)
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  last_active_at    DateTime            @default(now()) @db.Timestamptz(6)
+  inventories       UserInventory[]
+  transactions      MarketTransaction[]
+
+  @@map("users")
+}
+
+model Item {
+  item_id          Int                 @id @default(autoincrement())
+  name             String              @unique @db.VarChar(100)
+  description      String?             @db.Text
+  rarity           String              @db.VarChar(20) // 'Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'
+  base_value       Decimal             @db.Decimal(12, 2)
+  is_consumable    Boolean             @default(false)
+  inventories      UserInventory[]
+  commodities      MarketCommodity[]
+  transactions     MarketTransaction[]
+
+  @@map("items")
+}
+
+model UserInventory {
+  discord_id String  @db.VarChar(64)
+  item_id    Int
+  quantity   Int     @default(0)
+  user       User    @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+  item       Item    @relation(fields: [item_id], references: [item_id], onDelete: Cascade)
+
+  @@id([discord_id, item_id])
+  @@index([discord_id])
+  @@map("user_inventories")
+}
+
+model MarketCommodity {
+  commodity_id      Int      @id @default(autoincrement())
+  item_id           Int      @unique
+  current_price     Decimal  @db.Decimal(12, 2)
+  supply_pool       Int      @default(1000)
+  demand_multiplier Decimal  @default(1.00) @db.Decimal(4, 2)
+  updated_at        DateTime @default(now()) @db.Timestamptz(6)
+  item              Item     @relation(fields: [item_id], references: [item_id], onDelete: Cascade)
+
+  @@map("market_commodities")
+}
+
+model LoreLedger {
+  event_id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  event_type          String   @db.VarChar(50)
+  raw_trigger_summary String   @db.Text
+  generated_lore      String   @db.Text
+  recorded_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("lore_ledger")
+}
+
+model MarketTransaction {
+  transaction_id   Int      @id @default(autoincrement())
+  discord_id       String   @db.VarChar(64)
+  item_id          Int
+  transaction_type String   @db.VarChar(10) // 'BUY' or 'SELL'
+  quantity         Int
+  unit_price       Decimal  @db.Decimal(12, 2)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  user             User     @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+  item             Item     @relation(fields: [item_id], references: [item_id], onDelete: Cascade)
+
+  @@map("market_transactions")
+}

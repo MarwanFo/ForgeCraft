@@ -1,0 +1,30 @@
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# Environment secrets
+.env
+.env.local
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node / Javascript
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Logs and DB
+*.log
+*.sqlite
+*.db
+.vscode/
+
+# CDC Document
+cdc.md
+

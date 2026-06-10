@@ -4,3 +4,5 @@ pydantic>=2.5.3
 openai>=1.6.1
 groq>=0.4.1
 python-dotenv>=1.0.0
+redis>=5.0.1
+

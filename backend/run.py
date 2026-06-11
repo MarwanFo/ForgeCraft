@@ -62,6 +62,10 @@ async def run_services() -> None:
     )
     server = UvicornServer(config)
 
+    # Initialize database client first to prevent HTTP race conditions during startup
+    from src.database import init_db, close_db
+    await init_db()
+
     logger.info("Starting ForgeCraft AI Bot and FastAPI API Bridge concurrently...")
     try:
         # Run both services concurrently in the same asyncio event loop
@@ -76,6 +80,7 @@ async def run_services() -> None:
         if not bot.is_closed():
             logger.info("Closing active bot connection...")
             await bot.close()
+        await close_db()
 
 def main() -> None:
     try:

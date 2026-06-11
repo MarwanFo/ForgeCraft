@@ -76,6 +76,8 @@ class UserProfileResponse(BaseModel):
 # ----------------- Endpoint Routers -----------------
 
 @app.get("/")
+@app.get("/api")
+@app.get("/api/")
 async def root():
     return {"status": "online", "service": "ForgeCraft API Bridge"}
 

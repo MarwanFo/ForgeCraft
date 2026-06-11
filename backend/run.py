@@ -8,6 +8,15 @@ from dotenv import load_dotenv
 # Ensure backend root directory is prepended to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Prevent UnicodeEncodeError on Windows platforms when printing non-ASCII characters (like emojis/fancy fonts)
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+
 # Configure root logger
 logging.basicConfig(
     level=logging.INFO,

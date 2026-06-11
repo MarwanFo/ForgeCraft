@@ -6,7 +6,8 @@ import {
   Trophy, 
   Search, 
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Shield
 } from 'lucide-react';
 
 // Import modular pages
@@ -15,11 +16,12 @@ import MarketTicker from './pages/MarketTicker';
 import ChroniclePage from './pages/Chronicle';
 import Leaderboard from './pages/Leaderboard';
 import InspectPlayer from './pages/InspectPlayer';
+import AdminCenter from './pages/AdminCenter';
 
 const API_BASE = "http://localhost:8000/api";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'market' | 'chronicles' | 'leaderboard' | 'search'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin'>('overview');
   const [apiOnline, setApiOnline] = useState(true);
 
   // Quick health check on mount
@@ -88,6 +90,13 @@ function App() {
             <Search className="nav-item-icon" size={20} />
             <span>Inspect Player</span>
           </li>
+          <li 
+            className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            <Shield className="nav-item-icon" size={20} />
+            <span>Admin Center</span>
+          </li>
         </ul>
         
         <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -137,6 +146,7 @@ function App() {
         {activeTab === 'chronicles' && <ChroniclePage />}
         {activeTab === 'leaderboard' && <Leaderboard />}
         {activeTab === 'search' && <InspectPlayer />}
+        {activeTab === 'admin' && <AdminCenter />}
       </main>
     </div>
   );

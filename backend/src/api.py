@@ -73,6 +73,27 @@ class UserProfileResponse(BaseModel):
     user: UserResponse
     inventory: List[UserInventoryResponse]
 
+class TicketResponse(BaseModel):
+    ticket_id: str
+    discord_id: str
+    channel_id: str
+    status: str
+    created_at: datetime
+    closed_at: Optional[datetime] = None
+    username: Optional[str] = None
+
+class UserWarningResponse(BaseModel):
+    warning_id: str
+    discord_id: str
+    moderator_id: str
+    reason: str
+    issued_at: datetime
+    username: Optional[str] = None
+
+class ModerationLogsResponse(BaseModel):
+    warnings: List[UserWarningResponse]
+    tickets: List[TicketResponse]
+
 # ----------------- Endpoint Routers -----------------
 
 @app.get("/")
@@ -198,3 +219,107 @@ async def get_user_profile(discord_id: str):
     except Exception as e:
         logger.error(f"Failed to fetch user profile API: {e}")
         raise HTTPException(status_code=500, detail="Database user profile query failure.")
+
+@app.get("/api/tickets", response_model=List[TicketResponse])
+async def get_tickets():
+    """Returns a list of all active open tickets."""
+    db = get_db()
+    try:
+        tickets = await db.ticket.find_many(
+            where={"status": "OPEN"},
+            include={"user": True},
+            order={"created_at": "desc"}
+        )
+        serialized = []
+        for t in tickets:
+            serialized.append(
+                TicketResponse(
+                    ticket_id=str(t.ticket_id),
+                    discord_id=t.discord_id,
+                    channel_id=t.channel_id,
+                    status=t.status,
+                    created_at=t.created_at,
+                    closed_at=t.closed_at,
+                    username=t.user.username if t.user else "Unknown"
+                )
+            )
+        return serialized
+    except Exception as e:
+        logger.error(f"Failed to fetch open tickets API: {e}")
+        raise HTTPException(status_code=500, detail="Database tickets query failure.")
+
+@app.get("/api/warnings/{discord_id}", response_model=List[UserWarningResponse])
+async def get_warnings(discord_id: str):
+    """Returns active warnings for a user."""
+    db = get_db()
+    try:
+        warnings = await db.userwarning.find_many(
+            where={"discord_id": discord_id},
+            include={"user": True},
+            order={"issued_at": "desc"}
+        )
+        serialized = []
+        for w in warnings:
+            serialized.append(
+                UserWarningResponse(
+                    warning_id=str(w.warning_id),
+                    discord_id=w.discord_id,
+                    moderator_id=w.moderator_id,
+                    reason=w.reason,
+                    issued_at=w.issued_at,
+                    username=w.user.username if w.user else "Unknown"
+                )
+            )
+        return serialized
+    except Exception as e:
+        logger.error(f"Failed to fetch user warnings API: {e}")
+        raise HTTPException(status_code=500, detail="Database warnings query failure.")
+
+@app.get("/api/moderation/logs", response_model=ModerationLogsResponse)
+async def get_moderation_logs():
+    """Returns a history list of warnings and ticket closures."""
+    db = get_db()
+    try:
+        warnings = await db.userwarning.find_many(
+            include={"user": True},
+            order={"issued_at": "desc"}
+        )
+        tickets = await db.ticket.find_many(
+            include={"user": True},
+            order={"created_at": "desc"}
+        )
+        
+        serialized_warnings = []
+        for w in warnings:
+            serialized_warnings.append(
+                UserWarningResponse(
+                    warning_id=str(w.warning_id),
+                    discord_id=w.discord_id,
+                    moderator_id=w.moderator_id,
+                    reason=w.reason,
+                    issued_at=w.issued_at,
+                    username=w.user.username if w.user else "Unknown"
+                )
+            )
+            
+        serialized_tickets = []
+        for t in tickets:
+            serialized_tickets.append(
+                TicketResponse(
+                    ticket_id=str(t.ticket_id),
+                    discord_id=t.discord_id,
+                    channel_id=t.channel_id,
+                    status=t.status,
+                    created_at=t.created_at,
+                    closed_at=t.closed_at,
+                    username=t.user.username if t.user else "Unknown"
+                )
+            )
+            
+        return ModerationLogsResponse(
+            warnings=serialized_warnings,
+            tickets=serialized_tickets
+        )
+    except Exception as e:
+        logger.error(f"Failed to fetch moderation logs API: {e}")
+        raise HTTPException(status_code=500, detail="Database moderation logs query failure.")

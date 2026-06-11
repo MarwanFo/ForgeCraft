@@ -51,13 +51,21 @@ class ForgeCraftBot(commands.Bot):
                     except Exception as e:
                         logger.exception(f"Failed to load cog extension '{extension_name}'.")
         
-        # 3. Synchronize Slash Commands globally on Discord
+        # 3. Synchronize Slash Commands globally or instantly to a target testing guild
         try:
-            logger.info("Syncing application commands globally...")
-            synced = await self.tree.sync()
-            logger.info(f"Global sync complete. Registered {len(synced)} slash command(s).")
+            guild_id = os.getenv("TEST_GUILD_ID")
+            if guild_id:
+                logger.info(f"Syncing application commands instantly to target testing guild: {guild_id}...")
+                guild_target = discord.Object(id=int(guild_id))
+                self.tree.copy_global_to(guild=guild_target)
+                synced = await self.tree.sync(guild=guild_target)
+                logger.info(f"Guild-specific sync complete. Registered {len(synced)} slash command(s) instantly.")
+            else:
+                logger.info("Syncing application commands globally...")
+                synced = await self.tree.sync()
+                logger.info(f"Global sync complete. Registered {len(synced)} slash command(s) globally.")
         except Exception as e:
-            logger.error(f"Failed to sync slash commands globally: {e}")
+            logger.error(f"Failed to sync slash commands: {e}")
 
     async def on_ready(self) -> None:
         logger.info(f"ForgeCraft Bot connected successfully as {self.user} (ID: {self.user.id})")

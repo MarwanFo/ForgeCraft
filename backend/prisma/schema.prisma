@@ -22,6 +22,9 @@ model User {
   last_active_at    DateTime            @default(now()) @db.Timestamptz(6)
   inventories       UserInventory[]
   transactions      MarketTransaction[]
+  warnings          UserWarning[]
+  tickets           Ticket[]
+  daily_reward      DailyReward?
 
   @@map("users")
 }
@@ -86,4 +89,45 @@ model MarketTransaction {
   item             Item     @relation(fields: [item_id], references: [item_id], onDelete: Cascade)
 
   @@map("market_transactions")
+}
+
+model UserWarning {
+  warning_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  discord_id   String   @db.VarChar(64)
+  moderator_id String   @db.VarChar(64)
+  reason       String   @db.Text
+  issued_at    DateTime @default(now()) @db.Timestamptz(6)
+  user         User     @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+
+  @@map("user_warnings")
+}
+
+model Ticket {
+  ticket_id  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  discord_id String    @db.VarChar(64)
+  channel_id String    @unique @db.VarChar(64)
+  status     String    @db.VarChar(20) // 'OPEN', 'CLOSED'
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  closed_at  DateTime? @db.Timestamptz(6)
+  user       User      @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+
+  @@map("tickets")
+}
+
+model DailyReward {
+  discord_id      String   @id @db.VarChar(64)
+  last_claimed_at DateTime @db.Timestamptz(6)
+  current_streak  Int      @default(0)
+  user            User     @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+
+  @@map("daily_rewards")
+}
+
+model ReputationLog {
+  log_id      String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sender_id   String   @db.VarChar(64)
+  receiver_id String   @db.VarChar(64)
+  given_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("reputation_logs")
 }

@@ -20,6 +20,9 @@ model User {
   gold_balance      Decimal             @default(100.00) @db.Decimal(15, 2)
   created_at        DateTime            @default(now()) @db.Timestamptz(6)
   last_active_at    DateTime            @default(now()) @db.Timestamptz(6)
+  custom_title      String?             @db.VarChar(100)
+  language          String              @default("en") @db.VarChar(10)
+  color_role_id     String?             @db.VarChar(64)
   inventories       UserInventory[]
   transactions      MarketTransaction[]
   warnings          UserWarning[]
@@ -130,4 +133,14 @@ model ReputationLog {
   given_at    DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("reputation_logs")
+}
+
+model TempChannelSetting {
+  guild_id         String   @id @db.VarChar(64)
+  hub_channel_id   String?  @db.VarChar(64)
+  enabled          Boolean  @default(true)
+  max_channels     Int      @default(3)
+  cooldown_seconds Int      @default(10)
+
+  @@map("temp_channel_settings")
 }

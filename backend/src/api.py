@@ -2,8 +2,9 @@ import os
 import logging
 import httpx
 import jwt
+import math
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -499,5 +500,155 @@ async def auth_callback(payload: AuthCallbackRequest):
         except Exception as e:
             logger.error(f"Failed to process auth callback: {e}")
             raise HTTPException(status_code=500, detail="Authentication callback failure.")
+
+@app.get("/api/users/{discord_id}/dashboard-stats")
+async def get_dashboard_stats(discord_id: str):
+    """Retrieves computed gamification metrics, level thresholds, and global rank card info."""
+    db = get_db()
+    try:
+        user = await db.user.find_unique(where={"discord_id": discord_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="Adventurer profile not found.")
+            
+        xp = int(user.experience_points)
+        level = int(math.floor(math.sqrt(xp / 100)) + 1) if xp > 0 else 1
+        next_level_xp = ((level) ** 2) * 100
+        prev_level_xp = ((level - 1) ** 2) * 100
+        
+        # Determine global rank sorted by experience points
+        rank = await db.user.count(
+            where={
+                "experience_points": {
+                    "gt": user.experience_points
+                }
+            }
+        ) + 1
+        
+        # Determine reputation points
+        reputation = await db.reputationlog.count(
+            where={
+                "receiver_id": discord_id
+            }
+        )
+        
+        return {
+            "discord_id": user.discord_id,
+            "username": user.username,
+            "gold_balance": float(user.gold_balance),
+            "experience_points": xp,
+            "level": level,
+            "next_level_xp": next_level_xp,
+            "prev_level_xp": prev_level_xp,
+            "rank": rank,
+            "reputation": reputation,
+            "player_class": user.player_class,
+            "custom_title": user.custom_title or "Novice Adventurer"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to query dashboard statistics: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving user statistics.")
+
+@app.get("/api/users/{discord_id}/transactions")
+async def get_user_transactions(discord_id: str):
+    """Retrieves credit ledger ledger tracking history."""
+    db = get_db()
+    try:
+        txs = await db.credittransaction.find_many(
+            where={"discord_id": discord_id},
+            order={"created_at": "desc"}
+        )
+        return [
+            {
+                "transaction_id": str(tx.transaction_id),
+                "amount": float(tx.amount),
+                "description": tx.description,
+                "created_at": tx.created_at
+            }
+            for tx in txs
+        ]
+    except Exception as e:
+        logger.error(f"Failed to fetch credit ledger logs: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving transaction history.")
+
+@app.post("/api/users/{discord_id}/daily-claim")
+async def claim_daily_reward(discord_id: str):
+    """Processes daily reward checks, streaking updates, and wallet balance modifications."""
+    db = get_db()
+    try:
+        user = await db.user.find_unique(where={"discord_id": discord_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="Adventurer profile not found.")
+            
+        now = datetime.now(timezone.utc)
+        daily = await db.dailyreward.find_unique(where={"discord_id": discord_id})
+        
+        streak = 1
+        if daily:
+            # Check cooldown duration
+            delta = now - daily.last_claimed_at
+            hours_passed = delta.total_seconds() / 3600.0
+            
+            if hours_passed < 24.0:
+                cooldown_remaining = int(86400 - delta.total_seconds())
+                return {
+                    "claimed": False,
+                    "message": "Reward cooldown active.",
+                    "cooldown_seconds": max(cooldown_remaining, 0)
+                }
+            elif hours_passed < 48.0:
+                streak = daily.current_streak + 1
+            else:
+                streak = 1
+                
+        # Calculate streak multipliers
+        bonus = 10.00 * min(streak, 5)
+        reward_amount = 50.00 + bonus
+        
+        async with db.tx() as transaction:
+            # Add gold reward
+            await transaction.user.update(
+                where={"discord_id": discord_id},
+                data={"gold_balance": {"increment": Decimal(str(reward_amount))}}
+            )
+            
+            # Upsert cooldown marker
+            await transaction.dailyreward.upsert(
+                where={"discord_id": discord_id},
+                data={
+                    "create": {
+                        "discord_id": discord_id,
+                        "last_claimed_at": now,
+                        "current_streak": streak
+                    },
+                    "update": {
+                        "last_claimed_at": now,
+                        "current_streak": streak
+                    }
+                }
+            )
+            
+            # Log credit transaction record
+            await transaction.credittransaction.create(
+                data={
+                    "discord_id": discord_id,
+                    "amount": Decimal(str(reward_amount)),
+                    "description": f"Claimed daily reward. Streak: {streak} days."
+                }
+            )
+            
+        return {
+            "claimed": True,
+            "amount_claimed": reward_amount,
+            "new_streak": streak,
+            "message": f"Successfully claimed {reward_amount:.2f} Gold!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to issue daily claim reward: {e}")
+        raise HTTPException(status_code=500, detail="Database transaction failed during daily reward processing.")
+
 
 

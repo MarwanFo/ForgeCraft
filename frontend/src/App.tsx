@@ -7,11 +7,13 @@ import {
   Search, 
   Sparkles,
   AlertCircle,
-  Shield
+  Shield,
+  User
 } from 'lucide-react';
 
 // Import modular pages
 import DashboardOverview from './pages/DashboardOverview';
+import PlayerPortal from './pages/PlayerPortal';
 import MarketTicker from './pages/MarketTicker';
 import ChroniclePage from './pages/Chronicle';
 import Leaderboard from './pages/Leaderboard';
@@ -21,7 +23,7 @@ import AdminCenter from './pages/AdminCenter';
 const API_BASE = "http://localhost:8000/api";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'portal' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin'>('overview');
   const [apiOnline, setApiOnline] = useState(true);
   const [user, setUser] = useState<{ discord_id: string; username: string; avatar: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -104,6 +106,13 @@ function App() {
           >
             <LayoutDashboard className="nav-item-icon" size={20} />
             <span>Overview</span>
+          </li>
+          <li 
+            className={`nav-item ${activeTab === 'portal' ? 'active' : ''}`}
+            onClick={() => setActiveTab('portal')}
+          >
+            <User className="nav-item-icon" size={20} />
+            <span>Player Portal</span>
           </li>
           <li 
             className={`nav-item ${activeTab === 'market' ? 'active' : ''}`}
@@ -277,6 +286,7 @@ function App() {
 
         {/* Render modular pages based on active navigation item */}
         {activeTab === 'overview' && <DashboardOverview />}
+        {activeTab === 'portal' && <PlayerPortal />}
         {activeTab === 'market' && <MarketTicker />}
         {activeTab === 'chronicles' && <ChroniclePage />}
         {activeTab === 'leaderboard' && <Leaderboard />}

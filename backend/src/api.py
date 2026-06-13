@@ -651,4 +651,227 @@ async def claim_daily_reward(discord_id: str):
         raise HTTPException(status_code=500, detail="Database transaction failed during daily reward processing.")
 
 
+BACKGROUNDS_CATALOG = {
+    "default": {
+        "name": "Default Slate",
+        "price": 0.00,
+        "style": "linear-gradient(135deg, #1e293b, #0f172a)",
+        "description": "Standard issue obsidian slate theme."
+    },
+    "cyberpunk": {
+        "name": "Cyberpunk Grid",
+        "price": 250.00,
+        "style": "linear-gradient(135deg, #ec4899, #8b5cf6)",
+        "description": "Vibrant pink-to-purple neon grid aesthetic."
+    },
+    "neon_pulse": {
+        "name": "Neon Pulse",
+        "price": 500.00,
+        "style": "linear-gradient(135deg, #06b6d4, #3b82f6)",
+        "description": "Electric cyan wave patterns."
+    },
+    "aurora": {
+        "name": "Aurora Borealis",
+        "price": 1000.00,
+        "style": "linear-gradient(135deg, #10b981, #06b6d4)",
+        "description": "Curated curtains of green and turquoise light."
+    },
+    "void": {
+        "name": "Abyssal Void",
+        "price": 1500.00,
+        "style": "linear-gradient(135deg, #09090b, #18181b)",
+        "description": "A pitch-black darkness that absorbs all stars."
+    },
+    "golden_legend": {
+        "name": "Golden Legend",
+        "price": 2500.00,
+        "style": "linear-gradient(135deg, #fbbf24, #d97706)",
+        "description": "Gilded gold textures for legendary guild members."
+    }
+}
+
+class BuyBackgroundRequest(BaseModel):
+    discord_id: str
+    background_id: str
+
+class EquipBackgroundRequest(BaseModel):
+    discord_id: str
+    background_id: str
+
+@app.get("/api/shop/backgrounds")
+async def list_shop_backgrounds(discord_id: Optional[str] = None):
+    """Lists profile backgrounds catalog, pricing, and purchase/equipped states for a player."""
+    db = get_db()
+    try:
+        owned_ids = set(["default"])
+        equipped_id = "default"
+        
+        if discord_id:
+            user = await db.user.find_unique(where={"discord_id": discord_id})
+            if user:
+                equipped_id = user.equipped_background
+                owned = await db.userbackground.find_many(where={"discord_id": discord_id})
+                for bg in owned:
+                    owned_ids.add(bg.background_id)
+                    
+        return [
+            {
+                "background_id": bg_id,
+                "name": info["name"],
+                "price": info["price"],
+                "style": info["style"],
+                "description": info["description"],
+                "owned": bg_id in owned_ids,
+                "equipped": bg_id == equipped_id
+            }
+            for bg_id, info in BACKGROUNDS_CATALOG.items()
+        ]
+    except Exception as e:
+        logger.error(f"Failed to list backgrounds catalog: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving background cosmetics list.")
+
+@app.post("/api/shop/backgrounds/buy")
+async def buy_shop_background(req: BuyBackgroundRequest):
+    """Processes background purchase, gold deduction, and log generation in a transaction."""
+    db = get_db()
+    try:
+        if req.background_id not in BACKGROUNDS_CATALOG:
+            raise HTTPException(status_code=400, detail="Invalid background selected.")
+            
+        bg_info = BACKGROUNDS_CATALOG[req.background_id]
+        price = bg_info["price"]
+        
+        user = await db.user.find_unique(where={"discord_id": req.discord_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+            
+        if req.background_id == "default":
+            raise HTTPException(status_code=400, detail="The default background is already unlocked.")
+            
+        # Check if already owned
+        existing = await db.userbackground.find_unique(
+            where={
+                "discord_id_background_id": {
+                    "discord_id": req.discord_id,
+                    "background_id": req.background_id
+                }
+            }
+        )
+        if existing:
+            raise HTTPException(status_code=400, detail="You already own this background.")
+            
+        if float(user.gold_balance) < price:
+            raise HTTPException(status_code=400, detail="Insufficient gold balance to purchase this cosmetic.")
+            
+        # Process transaction
+        async with db.tx() as transaction:
+            # Deduct gold
+            await transaction.user.update(
+                where={"discord_id": req.discord_id},
+                data={"gold_balance": {"decrement": Decimal(str(price))}}
+            )
+            # Create user background unlock record
+            await transaction.userbackground.create(
+                data={
+                    "discord_id": req.discord_id,
+                    "background_id": req.background_id
+                }
+            )
+            # Log credit transaction
+            await transaction.credittransaction.create(
+                data={
+                    "discord_id": req.discord_id,
+                    "amount": Decimal(str(-price)),
+                    "description": f"Purchased '{bg_info['name']}' profile background."
+                }
+            )
+            
+        return {"success": True, "message": f"Successfully purchased '{bg_info['name']}' background!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to process background purchase: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error purchasing cosmetic background.")
+
+@app.post("/api/shop/backgrounds/equip")
+async def equip_shop_background(req: EquipBackgroundRequest):
+    """Sets a purchased profile cosmetic background as active."""
+    db = get_db()
+    try:
+        if req.background_id not in BACKGROUNDS_CATALOG:
+            raise HTTPException(status_code=400, detail="Invalid background selected.")
+            
+        if req.background_id != "default":
+            # Check ownership
+            existing = await db.userbackground.find_unique(
+                where={
+                    "discord_id_background_id": {
+                        "discord_id": req.discord_id,
+                        "background_id": req.background_id
+                    }
+                }
+            )
+            if not existing:
+                raise HTTPException(status_code=403, detail="You do not own this background cosmetic.")
+                
+        # Equip background
+        await db.user.update(
+            where={"discord_id": req.discord_id},
+            data={"equipped_background": req.background_id}
+        )
+        return {"success": True, "equipped_background": req.background_id, "message": "Background equipped successfully!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to equip background: {e}")
+        raise HTTPException(status_code=500, detail="Database error applying cosmetic background.")
+
+@app.get("/api/leaderboards/reputation")
+async def get_reputation_leaderboard():
+    """Retrieves top 100 users ordered by reputation points."""
+    db = get_db()
+    try:
+        users = await db.user.find_many(take=100)
+        user_reps = []
+        for u in users:
+            rep_count = await db.reputationlog.count(where={"receiver_id": u.discord_id})
+            xp = int(u.experience_points)
+            level = int(math.floor(math.sqrt(xp / 100)) + 1) if xp > 0 else 1
+            user_reps.append({
+                "discord_id": u.discord_id,
+                "username": u.username,
+                "player_class": u.player_class,
+                "level": level,
+                "reputation": rep_count
+            })
+        user_reps.sort(key=lambda x: x["reputation"], reverse=True)
+        return user_reps
+    except Exception as e:
+        logger.error(f"Failed to query reputation leaderboard: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving reputation standings.")
+
+@app.get("/api/leaderboards/wealth")
+async def get_wealth_leaderboard():
+    """Retrieves top 100 users ordered by gold balance."""
+    db = get_db()
+    try:
+        users = await db.user.find_many(
+            take=100,
+            order={"gold_balance": "desc"}
+        )
+        return [
+            {
+                "discord_id": u.discord_id,
+                "username": u.username,
+                "player_class": u.player_class,
+                "gold_balance": float(u.gold_balance)
+            }
+            for u in users
+        ]
+    except Exception as e:
+        logger.error(f"Failed to query wealth leaderboard: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving wealth standings.")
+
+
+
 

@@ -23,6 +23,7 @@ model User {
   custom_title      String?             @db.VarChar(100)
   language          String              @default("en") @db.VarChar(10)
   color_role_id     String?             @db.VarChar(64)
+  equipped_background String            @default("default") @db.VarChar(64)
   inventories       UserInventory[]
   transactions      MarketTransaction[]
   warnings          UserWarning[]

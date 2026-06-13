@@ -169,28 +169,69 @@ function App() {
               </button>
             </div>
           ) : (
-            <button 
-              onClick={() => {
-                const clientId = "1116516121063993384";
-                const redirectUri = encodeURIComponent("http://localhost:5173/");
-                const scope = "identify";
-                window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
-              }} 
-              disabled={authLoading}
-              className="btn-primary" 
-              style={{ 
-                padding: '10px 14px', 
-                fontSize: '0.9rem', 
-                background: 'var(--primary)', 
-                borderColor: 'var(--primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <span>{authLoading ? 'Signing In...' : 'Login with Discord'}</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <button 
+                onClick={() => {
+                  const clientId = "1116516121063993384";
+                  const redirectUri = encodeURIComponent("http://localhost:5173/");
+                  const scope = "identify";
+                  window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+                }} 
+                disabled={authLoading}
+                className="btn-primary" 
+                style={{ 
+                  padding: '10px 14px', 
+                  fontSize: '0.9rem', 
+                  background: 'var(--primary)', 
+                  borderColor: 'var(--primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>{authLoading ? 'Signing In...' : 'Login with Discord'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setAuthLoading(true);
+                  fetch(`${API_BASE}/auth/callback`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: 'sandbox_dev_bypass' })
+                  })
+                  .then(res => {
+                    if (!res.ok) throw new Error("Sandbox login failed.");
+                    return res.json();
+                  })
+                  .then(data => {
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    setUser(data.user);
+                  })
+                  .catch(err => {
+                    console.error(err);
+                    alert("Sandbox login failed. Make sure the backend API is running.");
+                  })
+                  .finally(() => {
+                    setAuthLoading(false);
+                  });
+                }}
+                disabled={authLoading}
+                className="btn-primary"
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '0.8rem',
+                  background: 'rgba(255,255,255,0.05)',
+                  borderColor: 'rgba(255,255,255,0.1)',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer'
+                }}
+              >
+                Sandbox Login (Bypass Discord)
+              </button>
+            </div>
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>

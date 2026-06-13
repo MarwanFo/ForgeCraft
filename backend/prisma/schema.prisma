@@ -28,6 +28,8 @@ model User {
   warnings          UserWarning[]
   tickets           Ticket[]
   daily_reward      DailyReward?
+  credit_transactions CreditTransaction[]
+  backgrounds       UserBackground[]
 
   @@map("users")
 }
@@ -144,3 +146,54 @@ model TempChannelSetting {
 
   @@map("temp_channel_settings")
 }
+
+model CreditTransaction {
+  transaction_id String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  discord_id     String   @db.VarChar(64)
+  amount         Decimal  @db.Decimal(15, 2)
+  description    String   @db.VarChar(256)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  user           User     @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}
+
+model UserBackground {
+  discord_id   String   @db.VarChar(64)
+  background_id String   @db.VarChar(64)
+  purchased_at DateTime @default(now()) @db.Timestamptz(6)
+  user         User     @relation(fields: [discord_id], references: [discord_id], onDelete: Cascade)
+
+  @@id([discord_id, background_id])
+  @@map("user_backgrounds")
+}
+
+model WelcomeSetting {
+  guild_id       String   @id @db.VarChar(64)
+  enabled        Boolean  @default(false)
+  channel_id     String?  @db.VarChar(64)
+  welcome_text   String   @default("Welcome [user] to [server]!") @db.Text
+  avatar_shape   String   @default("circle") @db.VarChar(20)
+  avatar_size    Int      @default(128)
+  avatar_x       Int      @default(50)
+  avatar_y       Int      @default(50)
+  username_x     Int      @default(50)
+  username_y     Int      @default(200)
+  background_url String?  @db.VarChar(512)
+
+  @@map("welcome_settings")
+}
+
+model AutoResponse {
+  response_id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  guild_id          String   @db.VarChar(64)
+  trigger_keyword   String   @db.VarChar(128)
+  matching_rule     String   @default("exact") @db.VarChar(20)
+  reply_content     String   @db.Text
+  is_embed          Boolean  @default(false)
+  embed_template_id String?  @db.VarChar(64)
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("auto_responses")
+}
+

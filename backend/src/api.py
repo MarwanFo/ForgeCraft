@@ -1,4 +1,7 @@
+import os
 import logging
+import httpx
+import jwt
 from typing import List, Optional
 from datetime import datetime
 from decimal import Decimal
@@ -99,6 +102,14 @@ class UserAdjustRequest(BaseModel):
     gold_balance: Optional[float] = None
     player_class: Optional[str] = None
     custom_title: Optional[str] = None
+
+DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "1116516121063993384")
+DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "mock_secret")
+DISCORD_REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:5173/")
+JWT_SECRET = os.getenv("JWT_SECRET", "forgecraft_super_secret_jwt_key")
+
+class AuthCallbackRequest(BaseModel):
+    code: str
 
 # ----------------- Endpoint Routers -----------------
 
@@ -378,4 +389,115 @@ async def adjust_user_profile(discord_id: str, payload: UserAdjustRequest):
     except Exception as e:
         logger.error(f"Failed to adjust user profile: {e}")
         raise HTTPException(status_code=500, detail="Database player update failure.")
+
+@app.post("/api/auth/callback")
+async def auth_callback(payload: AuthCallbackRequest):
+    """Callback receiver that exchanges authorization code for user credentials and generates JWT."""
+    code = payload.code
+    async with httpx.AsyncClient() as client:
+        try:
+            token_url = "https://discord.com/api/oauth2/token"
+            data = {
+                "client_id": DISCORD_CLIENT_ID,
+                "client_secret": DISCORD_CLIENT_SECRET,
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": DISCORD_REDIRECT_URI
+            }
+            headers = {"Content-Type": "application/x-www-form-urlencoded"}
+            
+            # Dev/Sandbox bypass to ease testing when credentials are unset
+            if DISCORD_CLIENT_SECRET == "mock_secret":
+                logger.info("Sandbox developer authentication bypass triggered.")
+                mock_discord_id = "1116516121063993384"
+                mock_username = "Guest Adventurer"
+                mock_avatar = "default_avatar"
+                
+                db = get_db()
+                user = await db.user.find_unique(where={"discord_id": mock_discord_id})
+                if not user:
+                    await db.user.create(
+                        data={
+                            "discord_id": mock_discord_id,
+                            "username": mock_username,
+                        }
+                    )
+                
+                jwt_token = jwt.encode(
+                    {
+                        "discord_id": mock_discord_id,
+                        "username": mock_username,
+                        "avatar": mock_avatar
+                    },
+                    JWT_SECRET,
+                    algorithm="HS256"
+                )
+                return {
+                    "token": jwt_token,
+                    "user": {
+                        "discord_id": mock_discord_id,
+                        "username": mock_username,
+                        "avatar": mock_avatar
+                    }
+                }
+
+            token_res = await client.post(token_url, data=data, headers=headers)
+            if token_res.status_code != 200:
+                logger.error(f"Discord oauth code exchange failed: {token_res.text}")
+                raise HTTPException(status_code=400, detail="Discord authorization exchange failed.")
+            
+            tokens = token_res.json()
+            access_token = tokens.get("access_token")
+            
+            user_url = "https://discord.com/api/users/@me"
+            user_res = await client.get(user_url, headers={"Authorization": f"Bearer {access_token}"})
+            if user_res.status_code != 200:
+                logger.error(f"Failed to fetch user profile info: {user_res.text}")
+                raise HTTPException(status_code=400, detail="Failed to retrieve profile credentials.")
+                
+            profile = user_res.json()
+            discord_id = profile["id"]
+            username = profile["username"]
+            avatar = profile.get("avatar") or "default_avatar"
+            
+            db = get_db()
+            user = await db.user.find_unique(where={"discord_id": discord_id})
+            if not user:
+                await db.user.create(
+                    data={
+                        "discord_id": discord_id,
+                        "username": username,
+                    }
+                )
+            else:
+                if user.username != username:
+                    await db.user.update(
+                        where={"discord_id": discord_id},
+                        data={"username": username}
+                    )
+            
+            jwt_token = jwt.encode(
+                {
+                    "discord_id": discord_id,
+                    "username": username,
+                    "avatar": avatar
+                },
+                JWT_SECRET,
+                algorithm="HS256"
+            )
+            
+            return {
+                "token": jwt_token,
+                "user": {
+                    "discord_id": discord_id,
+                    "username": username,
+                    "avatar": avatar
+                }
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to process auth callback: {e}")
+            raise HTTPException(status_code=500, detail="Authentication callback failure.")
+
 

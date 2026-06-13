@@ -23,6 +23,8 @@ const API_BASE = "http://localhost:8000/api";
 function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin'>('overview');
   const [apiOnline, setApiOnline] = useState(true);
+  const [user, setUser] = useState<{ discord_id: string; username: string; avatar: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Quick health check on mount
   const checkApiHealth = async () => {
@@ -42,6 +44,47 @@ function App() {
     checkApiHealth();
     // Run health check periodically every 10 seconds
     const interval = setInterval(checkApiHealth, 10000);
+
+    // Read existing user session
+    const storedUser = localStorage.getItem('user');
+    const storedToken = localStorage.getItem('token');
+    if (storedUser && storedToken) {
+      setUser(JSON.parse(storedUser));
+    }
+
+    // Capture OAuth2 redirection code callback
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) {
+      setAuthLoading(true);
+      // Clean address bar immediately
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      fetch(`${API_BASE}/auth/callback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ code })
+      })
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Discord Login authentication failed.");
+        return res.json();
+      })
+      .then(data => {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        setUser(data.user);
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Discord Login failed. Ensure the API bridge is online and active.");
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
+    }
+
     return () => clearInterval(interval);
   }, []);
 
@@ -99,7 +142,57 @@ function App() {
           </li>
         </ul>
         
-        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 0 0', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+          {user ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <img 
+                  src={user.avatar === "default_avatar" ? "https://cdn.discordapp.com/embed/avatars/0.png" : `https://cdn.discordapp.com/avatars/${user.discord_id}/${user.avatar}.png`} 
+                  alt="Avatar" 
+                  style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid var(--primary-glow)' }}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>{user.username}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ID: {user.discord_id}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                  setUser(null);
+                }} 
+                className="btn-primary" 
+                style={{ padding: '6px 12px', fontSize: '0.8rem', background: 'transparent', borderColor: 'rgba(255,255,255,0.1)' }}
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={() => {
+                const clientId = "1116516121063993384";
+                const redirectUri = encodeURIComponent("http://localhost:5173/");
+                const scope = "identify";
+                window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
+              }} 
+              disabled={authLoading}
+              className="btn-primary" 
+              style={{ 
+                padding: '10px 14px', 
+                fontSize: '0.9rem', 
+                background: 'var(--primary)', 
+                borderColor: 'var(--primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>{authLoading ? 'Signing In...' : 'Login with Discord'}</span>
+            </button>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem' }}>
             <span style={{ 
               width: '8px', 

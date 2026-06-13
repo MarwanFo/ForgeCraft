@@ -10,7 +10,8 @@ import {
   Shield,
   User,
   MessageSquare,
-  Code
+  Code,
+  Image
 } from 'lucide-react';
 
 // Import modular pages
@@ -23,11 +24,12 @@ import InspectPlayer from './pages/InspectPlayer';
 import AdminCenter from './pages/AdminCenter';
 import EmbedBuilder from './pages/EmbedBuilder';
 import AutoResponder from './pages/AutoResponder';
+import WelcomeDesigner from './pages/WelcomeDesigner';
 
 const API_BASE = "http://localhost:8000/api";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'portal' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin' | 'embeds' | 'autoresponder'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'portal' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin' | 'embeds' | 'autoresponder' | 'welcome'>('overview');
   const [apiOnline, setApiOnline] = useState(true);
   const [user, setUser] = useState<{ discord_id: string; username: string; avatar: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -159,6 +161,13 @@ function App() {
           >
             <Code className="nav-item-icon" size={20} />
             <span>Embed Creator</span>
+          </li>
+          <li 
+            className={`nav-item ${activeTab === 'welcome' ? 'active' : ''}`}
+            onClick={() => setActiveTab('welcome')}
+          >
+            <Image className="nav-item-icon" size={20} />
+            <span>Welcome Designer</span>
           </li>
           <li 
             className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
@@ -311,6 +320,7 @@ function App() {
         {activeTab === 'search' && <InspectPlayer />}
         {activeTab === 'autoresponder' && <AutoResponder />}
         {activeTab === 'embeds' && <EmbedBuilder />}
+        {activeTab === 'welcome' && <WelcomeDesigner />}
         {activeTab === 'admin' && <AdminCenter />}
       </main>
     </div>

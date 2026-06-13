@@ -1031,6 +1031,124 @@ async def delete_embed_template(guild_id: str, template_id: str):
         raise HTTPException(status_code=500, detail="Database error removing embed template.")
 
 
+class WelcomeSettingUpdateRequest(BaseModel):
+    enabled: bool
+    channel_id: Optional[str] = None
+    welcome_text: str
+    avatar_shape: str = "circle"
+    avatar_size: int = 128
+    avatar_x: int = 50
+    avatar_y: int = 50
+    username_x: int = 50
+    username_y: int = 200
+    background_url: Optional[str] = None
+
+class WelcomePreviewRequest(BaseModel):
+    username: str = "Adventurer"
+    avatar_url: str = "https://cdn.discordapp.com/embed/avatars/0.png"
+    avatar_shape: str = "circle"
+    avatar_size: int = 128
+    avatar_x: int = 50
+    avatar_y: int = 50
+    username_x: int = 50
+    username_y: int = 200
+    background_url: Optional[str] = None
+
+@app.get("/api/guilds/{guild_id}/welcome")
+async def get_welcome_settings(guild_id: str):
+    """Fetches welcome message and canvas configurations for a guild."""
+    db = get_db()
+    try:
+        setting = await db.welcomesetting.find_unique(where={"guild_id": guild_id})
+        if not setting:
+            return {
+                "guild_id": guild_id,
+                "enabled": False,
+                "channel_id": "",
+                "welcome_text": "Welcome [user] to [server]!",
+                "avatar_shape": "circle",
+                "avatar_size": 128,
+                "avatar_x": 50,
+                "avatar_y": 50,
+                "username_x": 50,
+                "username_y": 200,
+                "background_url": ""
+            }
+        return {
+            "guild_id": setting.guild_id,
+            "enabled": setting.enabled,
+            "channel_id": setting.channel_id or "",
+            "welcome_text": setting.welcome_text,
+            "avatar_shape": setting.avatar_shape,
+            "avatar_size": setting.avatar_size,
+            "avatar_x": setting.avatar_x,
+            "avatar_y": setting.avatar_y,
+            "username_x": setting.username_x,
+            "username_y": setting.username_y,
+            "background_url": setting.background_url or ""
+        }
+    except Exception as e:
+        logger.error(f"Failed to query welcome settings: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving welcome settings.")
+
+@app.post("/api/guilds/{guild_id}/welcome")
+async def update_welcome_settings(guild_id: str, req: WelcomeSettingUpdateRequest):
+    """Saves customized welcome message settings and canvas positions."""
+    db = get_db()
+    try:
+        setting = await db.welcomesetting.upsert(
+            where={"guild_id": guild_id},
+            data={
+                "create": {
+                    "guild_id": guild_id,
+                    "enabled": req.enabled,
+                    "channel_id": req.channel_id,
+                    "welcome_text": req.welcome_text,
+                    "avatar_shape": req.avatar_shape,
+                    "avatar_size": req.avatar_size,
+                    "avatar_x": req.avatar_x,
+                    "avatar_y": req.avatar_y,
+                    "username_x": req.username_x,
+                    "username_y": req.username_y,
+                    "background_url": req.background_url
+                },
+                "update": {
+                    "enabled": req.enabled,
+                    "channel_id": req.channel_id,
+                    "welcome_text": req.welcome_text,
+                    "avatar_shape": req.avatar_shape,
+                    "avatar_size": req.avatar_size,
+                    "avatar_x": req.avatar_x,
+                    "avatar_y": req.avatar_y,
+                    "username_x": req.username_x,
+                    "username_y": req.username_y,
+                    "background_url": req.background_url
+                }
+            }
+        )
+        return {"success": True, "message": "Welcome settings updated successfully!"}
+    except Exception as e:
+        logger.error(f"Failed to save welcome settings: {e}")
+        raise HTTPException(status_code=500, detail="Database error updating welcome settings.")
+
+@app.post("/api/welcome/preview")
+async def get_welcome_preview(req: WelcomePreviewRequest):
+    """Generates and returns raw PNG bytes of the welcomer card matching coordinates."""
+    from src.engine.welcome import generate_welcome_banner
+    try:
+        banner_bytes = await generate_welcome_banner(
+            username=req.username,
+            avatar_url=req.avatar_url,
+            setting=req
+        )
+        from fastapi.responses import Response
+        return Response(content=banner_bytes, media_type="image/png")
+    except Exception as e:
+        logger.error(f"Failed to draw welcome banner preview: {e}")
+        raise HTTPException(status_code=500, detail="Failed to render card preview.")
+
+
+
 
 
 

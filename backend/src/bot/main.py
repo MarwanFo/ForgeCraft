@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+import io
 from datetime import datetime
 import discord
 from discord.ext import commands
@@ -208,6 +209,54 @@ class ForgeCraftBot(commands.Bot):
         # 4. Process command matching (if any prefix commands exist)
         await self.process_commands(message)
 
+    async def on_member_join(self, member: discord.Member) -> None:
+        """
+        Runs when a new member joins a guild.
+        Fetches WelcomeSetting configuration, downloads avatar, generates Pillow banner, and sends message.
+        """
+        logger.info(f"Member joined: {member.name} (ID: {member.id}) in Guild {member.guild.id}")
+        db = get_db()
+        guild_id = str(member.guild.id)
+        try:
+            # Fetch welcome settings
+            setting = await db.welcomesetting.find_unique(where={"guild_id": guild_id})
+            if not setting or not setting.enabled:
+                logger.info(f"Welcome messages are disabled or not configured for guild {guild_id}.")
+                return
+                
+            # If no channel is specified, fallback to system_channel or the first general channel
+            channel = None
+            if setting.channel_id:
+                channel = member.guild.get_channel(int(setting.channel_id))
+            if not channel:
+                channel = member.guild.system_channel
+                
+            if not channel:
+                logger.warning(f"Could not locate suitable target channel to post welcome greeting in guild {guild_id}.")
+                return
+                
+            # Customize welcome text: replace placeholders [user] and [server]
+            text = setting.welcome_text or "Welcome [user] to [server]!"
+            text = text.replace("[user]", member.mention).replace("[server]", member.guild.name)
+            
+            # Fetch avatar URL
+            avatar_url = member.avatar.url if member.avatar else member.default_avatar.url
+            
+            # Generate the dynamic banner
+            from src.engine.welcome import generate_welcome_banner
+            banner_bytes = await generate_welcome_banner(
+                username=member.name,
+                avatar_url=avatar_url,
+                setting=setting
+            )
+            
+            # Attach to message
+            file = discord.File(io.BytesIO(banner_bytes), filename="welcome.png")
+            await channel.send(content=text, file=file)
+            logger.info(f"Sent welcome banner greeting for {member.name} successfully.")
+        except Exception as e:
+            logger.error(f"Failed to execute welcome greeting lifecycle for {member.name}: {e}")
+
     async def close(self) -> None:
         """
         Graceful teardown hooks.
@@ -216,3 +265,4 @@ class ForgeCraftBot(commands.Bot):
         await self.chat_buffer.close()
         await close_db()
         await super().close()
+

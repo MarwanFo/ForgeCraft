@@ -8,7 +8,9 @@ import {
   Sparkles,
   AlertCircle,
   Shield,
-  User
+  User,
+  MessageSquare,
+  Code
 } from 'lucide-react';
 
 // Import modular pages
@@ -19,11 +21,13 @@ import ChroniclePage from './pages/Chronicle';
 import Leaderboard from './pages/Leaderboard';
 import InspectPlayer from './pages/InspectPlayer';
 import AdminCenter from './pages/AdminCenter';
+import EmbedBuilder from './pages/EmbedBuilder';
+import AutoResponder from './pages/AutoResponder';
 
 const API_BASE = "http://localhost:8000/api";
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'overview' | 'portal' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'portal' | 'market' | 'chronicles' | 'leaderboard' | 'search' | 'admin' | 'embeds' | 'autoresponder'>('overview');
   const [apiOnline, setApiOnline] = useState(true);
   const [user, setUser] = useState<{ discord_id: string; username: string; avatar: string } | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -141,6 +145,20 @@ function App() {
           >
             <Search className="nav-item-icon" size={20} />
             <span>Inspect Player</span>
+          </li>
+          <li 
+            className={`nav-item ${activeTab === 'autoresponder' ? 'active' : ''}`}
+            onClick={() => setActiveTab('autoresponder')}
+          >
+            <MessageSquare className="nav-item-icon" size={20} />
+            <span>Auto-Responder</span>
+          </li>
+          <li 
+            className={`nav-item ${activeTab === 'embeds' ? 'active' : ''}`}
+            onClick={() => setActiveTab('embeds')}
+          >
+            <Code className="nav-item-icon" size={20} />
+            <span>Embed Creator</span>
           </li>
           <li 
             className={`nav-item ${activeTab === 'admin' ? 'active' : ''}`}
@@ -291,6 +309,8 @@ function App() {
         {activeTab === 'chronicles' && <ChroniclePage />}
         {activeTab === 'leaderboard' && <Leaderboard />}
         {activeTab === 'search' && <InspectPlayer />}
+        {activeTab === 'autoresponder' && <AutoResponder />}
+        {activeTab === 'embeds' && <EmbedBuilder />}
         {activeTab === 'admin' && <AdminCenter />}
       </main>
     </div>

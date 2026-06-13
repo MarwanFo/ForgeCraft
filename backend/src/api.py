@@ -873,5 +873,164 @@ async def get_wealth_leaderboard():
         raise HTTPException(status_code=500, detail="Database error retrieving wealth standings.")
 
 
+class AutoResponseCreateRequest(BaseModel):
+    trigger_keyword: str
+    matching_rule: str
+    reply_content: str
+    is_embed: bool = False
+    embed_template_id: Optional[str] = None
+
+class EmbedTemplateCreateRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    color_hex: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    image_url: Optional[str] = None
+    author_name: Optional[str] = None
+    footer_text: Optional[str] = None
+
+@app.get("/api/guilds/{guild_id}/auto-responder")
+async def list_auto_responses(guild_id: str):
+    """Lists configured auto-responder trigger rules for a guild."""
+    db = get_db()
+    try:
+        responses = await db.autoresponse.find_many(
+            where={"guild_id": guild_id},
+            order={"created_at": "desc"}
+        )
+        return [
+            {
+                "response_id": str(r.response_id),
+                "guild_id": r.guild_id,
+                "trigger_keyword": r.trigger_keyword,
+                "matching_rule": r.matching_rule,
+                "reply_content": r.reply_content,
+                "is_embed": r.is_embed,
+                "embed_template_id": r.embed_template_id,
+                "created_at": r.created_at
+            }
+            for r in responses
+        ]
+    except Exception as e:
+        logger.error(f"Failed to query auto-responses: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving rules list.")
+
+@app.post("/api/guilds/{guild_id}/auto-responder")
+async def create_auto_response(guild_id: str, req: AutoResponseCreateRequest):
+    """Configures a new auto-responder trigger keyword response rule."""
+    db = get_db()
+    try:
+        if req.is_embed and req.embed_template_id:
+            template = await db.embedtemplate.find_unique(where={"template_id": req.embed_template_id})
+            if not template:
+                raise HTTPException(status_code=400, detail="Specified embed template does not exist.")
+        
+        rule = await db.autoresponse.create(
+            data={
+                "guild_id": guild_id,
+                "trigger_keyword": req.trigger_keyword,
+                "matching_rule": req.matching_rule,
+                "reply_content": req.reply_content,
+                "is_embed": req.is_embed,
+                "embed_template_id": req.embed_template_id
+            }
+        )
+        return {"success": True, "response_id": str(rule.response_id), "message": "Auto-response rule configured!"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create auto-response: {e}")
+        raise HTTPException(status_code=500, detail="Database error saving auto-response rule.")
+
+@app.delete("/api/guilds/{guild_id}/auto-responder/{response_id}")
+async def delete_auto_response(guild_id: str, response_id: str):
+    """Deletes a configured auto-responder trigger rule."""
+    db = get_db()
+    try:
+        existing = await db.autoresponse.find_first(
+            where={"response_id": response_id, "guild_id": guild_id}
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Auto-response rule not found.")
+            
+        await db.autoresponse.delete(where={"response_id": response_id})
+        return {"success": True, "message": "Auto-response rule deleted successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete auto-response: {e}")
+        raise HTTPException(status_code=500, detail="Database error removing auto-response rule.")
+
+@app.get("/api/guilds/{guild_id}/embed-templates")
+async def list_embed_templates(guild_id: str):
+    """Lists saved custom Discord message embed templates for a guild."""
+    db = get_db()
+    try:
+        templates = await db.embedtemplate.find_many(
+            where={"guild_id": guild_id},
+            order={"created_at": "desc"}
+        )
+        return [
+            {
+                "template_id": str(t.template_id),
+                "guild_id": t.guild_id,
+                "title": t.title,
+                "description": t.description,
+                "color_hex": t.color_hex,
+                "thumbnail_url": t.thumbnail_url,
+                "image_url": t.image_url,
+                "author_name": t.author_name,
+                "footer_text": t.footer_text,
+                "created_at": t.created_at
+            }
+            for t in templates
+        ]
+    except Exception as e:
+        logger.error(f"Failed to list embed templates: {e}")
+        raise HTTPException(status_code=500, detail="Database error retrieving embed templates list.")
+
+@app.post("/api/guilds/{guild_id}/embed-templates")
+async def create_embed_template(guild_id: str, req: EmbedTemplateCreateRequest):
+    """Saves a custom message embed layout template for use in auto-responses or web announcements."""
+    db = get_db()
+    try:
+        template = await db.embedtemplate.create(
+            data={
+                "guild_id": guild_id,
+                "title": req.title,
+                "description": req.description,
+                "color_hex": req.color_hex or "#5865F2",
+                "thumbnail_url": req.thumbnail_url,
+                "image_url": req.image_url,
+                "author_name": req.author_name,
+                "footer_text": req.footer_text
+            }
+        )
+        return {"success": True, "template_id": str(template.template_id), "message": "Embed layout template created!"}
+    except Exception as e:
+        logger.error(f"Failed to create embed template: {e}")
+        raise HTTPException(status_code=500, detail="Database error saving embed layout template.")
+
+@app.delete("/api/guilds/{guild_id}/embed-templates/{template_id}")
+async def delete_embed_template(guild_id: str, template_id: str):
+    """Deletes a saved Discord message embed template."""
+    db = get_db()
+    try:
+        existing = await db.embedtemplate.find_first(
+            where={"template_id": template_id, "guild_id": guild_id}
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Embed template not found.")
+            
+        await db.embedtemplate.delete(where={"template_id": template_id})
+        return {"success": True, "message": "Embed template deleted successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete embed template: {e}")
+        raise HTTPException(status_code=500, detail="Database error removing embed template.")
+
+
+
 
 

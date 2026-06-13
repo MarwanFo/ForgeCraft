@@ -198,3 +198,19 @@ model AutoResponse {
   @@map("auto_responses")
 }
 
+model EmbedTemplate {
+  template_id   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  guild_id      String   @db.VarChar(64)
+  title         String?  @db.VarChar(256)
+  description   String?  @db.Text
+  color_hex     String?  @db.VarChar(7)
+  thumbnail_url String?  @db.VarChar(512)
+  image_url     String?  @db.VarChar(512)
+  author_name   String?  @db.VarChar(256)
+  footer_text   String?  @db.VarChar(256)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("embed_templates")
+}
+
+

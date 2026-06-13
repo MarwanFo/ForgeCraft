@@ -8,7 +8,10 @@ import {
   Clock, 
   CheckCircle, 
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Sliders,
+  UserCheck
 } from 'lucide-react';
 
 const API_BASE = "http://localhost:8000/api";
@@ -33,12 +36,26 @@ interface UserWarning {
 }
 
 export default function AdminCenter() {
-  const [activeTab, setActiveTab] = useState<'tickets' | 'warnings' | 'audit'>('tickets');
+  const [activeTab, setActiveTab] = useState<'tickets' | 'warnings' | 'players' | 'audit'>('tickets');
   const [openTickets, setOpenTickets] = useState<Ticket[]>([]);
   const [warnings, setWarnings] = useState<UserWarning[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  // Player Inspector state
+  const [inspectId, setInspectId] = useState('');
+  const [inspectedUser, setInspectedUser] = useState<any>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [inspectError, setInspectError] = useState('');
+
+  // Form states
+  const [formXp, setFormXp] = useState(0);
+  const [formGold, setFormGold] = useState(0.0);
+  const [formClass, setFormClass] = useState('Adventurer');
+  const [formTitle, setFormTitle] = useState('');
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -72,6 +89,84 @@ export default function AdminCenter() {
   const formatDate = (isoString: string) => {
     const d = new Date(isoString);
     return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Warning deletion handler
+  const handleDeleteWarning = async (warningId: string) => {
+    if (!window.confirm("Are you sure you want to delete this warning record?")) return;
+    try {
+      const res = await fetch(`${API_BASE}/warnings/${warningId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) throw new Error("Failed to delete warning.");
+      alert("Warning deleted successfully.");
+      fetchAdminData();
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting warning record from database.");
+    }
+  };
+
+  // Player inspect loader
+  const handleInspect = async (idToInspect?: string) => {
+    const targetId = idToInspect || inspectId;
+    if (!targetId) return;
+    setInspectLoading(true);
+    setInspectError('');
+    setInspectedUser(null);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch(`${API_BASE}/users/${targetId}`);
+      if (!res.ok) {
+        if (res.status === 404) {
+          throw new Error("Player profile not found. Make sure they have interacted with the bot.");
+        }
+        throw new Error("Failed to fetch player profile.");
+      }
+      const data = await res.json();
+      setInspectedUser(data.user);
+      setFormXp(data.user.experience_points);
+      setFormGold(data.user.gold_balance);
+      setFormClass(data.user.player_class);
+      setFormTitle(data.user.custom_title || '');
+      if (idToInspect) {
+        setInspectId(targetId);
+      }
+    } catch (err: any) {
+      setInspectError(err.message || "An error occurred.");
+    } finally {
+      setInspectLoading(false);
+    }
+  };
+
+  // Player update handler
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inspectedUser) return;
+    setSaveLoading(true);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch(`${API_BASE}/users/${inspectedUser.discord_id}/adjust`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          experience_points: Number(formXp),
+          gold_balance: Number(formGold),
+          player_class: formClass,
+          custom_title: formTitle || null
+        })
+      });
+      if (!res.ok) throw new Error("Failed to save changes.");
+      setSaveSuccess(true);
+      fetchAdminData();
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update user profile.");
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   // Compile a chronological ledger of all events (warnings and ticket operations)
@@ -122,7 +217,6 @@ export default function AdminCenter() {
       }
     });
 
-    // Sort descending by date
     return events.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   };
 
@@ -153,7 +247,7 @@ export default function AdminCenter() {
       )}
 
       {/* Tabs Switcher */}
-      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '8px', flexWrap: 'wrap' }}>
         <button 
           onClick={() => setActiveTab('tickets')}
           className={`btn-primary ${activeTab === 'tickets' ? 'active' : ''}`}
@@ -177,6 +271,17 @@ export default function AdminCenter() {
           Warned Users ({warnings.length})
         </button>
         <button 
+          onClick={() => setActiveTab('players')}
+          className={`btn-primary ${activeTab === 'players' ? 'active' : ''}`}
+          style={{ 
+            background: activeTab === 'players' ? 'var(--primary)' : 'transparent',
+            borderColor: activeTab === 'players' ? 'var(--primary)' : 'rgba(255,255,255,0.1)',
+            color: '#fff'
+          }}
+        >
+          Player Editor
+        </button>
+        <button 
           onClick={() => setActiveTab('audit')}
           className={`btn-primary ${activeTab === 'audit' ? 'active' : ''}`}
           style={{ 
@@ -189,7 +294,7 @@ export default function AdminCenter() {
         </button>
       </div>
 
-      {loading ? (
+      {loading && activeTab !== 'players' ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '64px' }}>
           <RefreshCw size={36} className="brand-icon" style={{ animation: 'spin 1s linear infinite' }} />
         </div>
@@ -242,13 +347,14 @@ export default function AdminCenter() {
                 </div>
               ) : (
                 <div className="glass-panel" style={{ overflowX: 'auto', padding: 0 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(255, 255, 255, 0.02)' }}>
                         <th style={{ padding: '16px' }}>User</th>
                         <th style={{ padding: '16px' }}>Discord ID</th>
                         <th style={{ padding: '16px' }}>Warning Reason</th>
                         <th style={{ padding: '16px' }}>Issued Date</th>
+                        <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -263,6 +369,38 @@ export default function AdminCenter() {
                           <td style={{ padding: '16px' }}><code>{w.discord_id}</code></td>
                           <td style={{ padding: '16px', color: 'var(--warning)' }}>{w.reason}</td>
                           <td style={{ padding: '16px', fontSize: '0.9rem', color: 'var(--text-muted)' }}>{formatDate(w.issued_at)}</td>
+                          <td style={{ padding: '16px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button 
+                                onClick={() => {
+                                  setActiveTab('players');
+                                  handleInspect(w.discord_id);
+                                }}
+                                className="btn-primary" 
+                                style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Sliders size={12} />
+                                <span>Inspect</span>
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteWarning(w.warning_id)}
+                                className="btn-primary" 
+                                style={{ 
+                                  padding: '6px 12px', 
+                                  fontSize: '0.8rem', 
+                                  background: 'rgba(239, 68, 68, 0.15)', 
+                                  borderColor: 'rgba(239, 68, 68, 0.3)',
+                                  color: '#ff4d4d',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <Trash2 size={12} />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -272,7 +410,154 @@ export default function AdminCenter() {
             </div>
           )}
 
-          {/* 3. Audit Log Ledger Tab */}
+          {/* 3. Player Attributes Editor Tab */}
+          {activeTab === 'players' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <h2 style={{ margin: 0, fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <UserCheck size={24} style={{ color: 'var(--primary)' }} />
+                  <span>Inspect & Edit Player Profile</span>
+                </h2>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Enter Player Discord ID..." 
+                    value={inspectId}
+                    onChange={(e) => setInspectId(e.target.value)}
+                    style={{
+                      flexGrow: 1,
+                      padding: '12px 16px',
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      outline: 'none',
+                      fontSize: '1rem'
+                    }}
+                  />
+                  <button 
+                    onClick={() => handleInspect()}
+                    disabled={inspectLoading || !inspectId}
+                    className="btn-primary"
+                    style={{ padding: '0 24px' }}
+                  >
+                    {inspectLoading ? 'Searching...' : 'Inspect'}
+                  </button>
+                </div>
+
+                {inspectError && (
+                  <p style={{ color: 'var(--error)', margin: 0, fontSize: '0.9rem' }}>⚠️ {inspectError}</p>
+                )}
+              </div>
+
+              {inspectedUser && (
+                <form onSubmit={handleSaveUser} className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+                    Modify Profile: <span style={{ color: 'var(--primary-glow)' }}>{inspectedUser.username}</span>
+                  </h3>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Experience Points (XP)</label>
+                      <input 
+                        type="number" 
+                        value={formXp}
+                        onChange={(e) => setFormXp(Number(e.target.value))}
+                        style={{
+                          padding: '10px 14px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          color: '#fff'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Gold Balance</label>
+                      <input 
+                        type="number" 
+                        step="0.01"
+                        value={formGold}
+                        onChange={(e) => setFormGold(Number(e.target.value))}
+                        style={{
+                          padding: '10px 14px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          color: '#fff'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Player Class</label>
+                      <select 
+                        value={formClass}
+                        onChange={(e) => setFormClass(e.target.value)}
+                        style={{
+                          padding: '10px 14px',
+                          background: 'rgba(25,25,25,0.95)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          color: '#fff',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="Adventurer">Adventurer</option>
+                        <option value="Warrior">Warrior</option>
+                        <option value="Mage">Mage</option>
+                        <option value="Rogue">Rogue</option>
+                        <option value="Cleric">Cleric</option>
+                      </select>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Custom Profile Title</label>
+                      <input 
+                        type="text" 
+                        placeholder="No custom title" 
+                        value={formTitle}
+                        onChange={(e) => setFormTitle(e.target.value)}
+                        style={{
+                          padding: '10px 14px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '6px',
+                          color: '#fff'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {saveSuccess && (
+                    <p style={{ color: 'var(--success)', margin: 0, fontSize: '0.9rem' }}>✅ Changes saved and synchronized successfully!</p>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                    <button 
+                      type="submit" 
+                      disabled={saveLoading}
+                      className="btn-primary"
+                      style={{ padding: '12px 32px' }}
+                    >
+                      {saveLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={() => setInspectedUser(null)}
+                      className="btn-primary"
+                      style={{ padding: '12px 24px', background: 'transparent', borderColor: 'rgba(255,255,255,0.1)' }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {/* 4. Audit Log Ledger Tab */}
           {activeTab === 'audit' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <h2 style={{ margin: 0, fontSize: '1.5rem' }}>Chronological Audit Ledger</h2>

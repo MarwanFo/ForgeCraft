@@ -94,6 +94,12 @@ class ModerationLogsResponse(BaseModel):
     warnings: List[UserWarningResponse]
     tickets: List[TicketResponse]
 
+class UserAdjustRequest(BaseModel):
+    experience_points: Optional[int] = None
+    gold_balance: Optional[float] = None
+    player_class: Optional[str] = None
+    custom_title: Optional[str] = None
+
 # ----------------- Endpoint Routers -----------------
 
 @app.get("/")
@@ -323,3 +329,53 @@ async def get_moderation_logs():
     except Exception as e:
         logger.error(f"Failed to fetch moderation logs API: {e}")
         raise HTTPException(status_code=500, detail="Database moderation logs query failure.")
+
+@app.delete("/api/warnings/{warning_id}")
+async def delete_warning(warning_id: str):
+    """Delete a warning entry by ID."""
+    db = get_db()
+    try:
+        warning = await db.userwarning.find_unique(where={"warning_id": warning_id})
+        if not warning:
+            raise HTTPException(status_code=404, detail="Warning not found.")
+        await db.userwarning.delete(where={"warning_id": warning_id})
+        return {"status": "success", "message": f"Warning {warning_id} deleted."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete warning: {e}")
+        raise HTTPException(status_code=500, detail="Database warning deletion failure.")
+
+@app.post("/api/users/{discord_id}/adjust")
+async def adjust_user_profile(discord_id: str, payload: UserAdjustRequest):
+    """Adjust XP, gold, class, and custom title attributes for a player profile."""
+    db = get_db()
+    try:
+        user = await db.user.find_unique(where={"discord_id": discord_id})
+        if not user:
+            raise HTTPException(status_code=404, detail="Player profile not found.")
+        
+        update_data = {}
+        if payload.experience_points is not None:
+            update_data["experience_points"] = payload.experience_points
+        if payload.gold_balance is not None:
+            update_data["gold_balance"] = payload.gold_balance
+        if payload.player_class is not None:
+            update_data["player_class"] = payload.player_class
+        if payload.custom_title is not None:
+            update_data["custom_title"] = payload.custom_title
+            
+        if not update_data:
+            return {"status": "ignored", "message": "No fields updated."}
+            
+        await db.user.update(
+            where={"discord_id": discord_id},
+            data=update_data
+        )
+        return {"status": "success", "message": "User attributes successfully updated."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to adjust user profile: {e}")
+        raise HTTPException(status_code=500, detail="Database player update failure.")
+

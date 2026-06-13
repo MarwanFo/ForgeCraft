@@ -27,6 +27,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("forgecraft.runner")
 
+# Auto-activate/re-execute in virtual environment if running from system python on Windows
+venv_python = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "Scripts", "python.exe")
+if sys.prefix == sys.base_prefix and os.path.exists(venv_python) and sys.executable != venv_python:
+    logger.info("Virtual environment not active. Re-routing execution to local virtual environment...")
+    import subprocess
+    try:
+        sys.exit(subprocess.run([venv_python] + sys.argv).returncode)
+    except Exception as e:
+        logger.error(f"Failed to auto-restart script within virtual environment: {e}")
+
 # Load environment configs
 dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
 if os.path.exists(dotenv_path):

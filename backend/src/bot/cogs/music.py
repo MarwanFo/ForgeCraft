@@ -136,7 +136,7 @@ class MusicCog(commands.Cog):
                 player.voice = await member.voice.channel.connect()
             except Exception as e:
                 logger.exception("Failed to connect to voice channel.")
-                await interaction.followup.send("❌ Failed to join your voice channel. Check permissions.")
+                await interaction.followup.send(f"❌ Failed to join your voice channel. Error: `{type(e).__name__}: {str(e)}`")
                 return
         else:
             player.voice = voice_client

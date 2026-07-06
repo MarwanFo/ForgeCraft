@@ -214,7 +214,7 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="invite", description="Get the link to invite the bot to your server.")
-    async def bot_invite(self, interaction: discord.Interaction) -> None:
+    async def invite_bot(self, interaction: discord.Interaction) -> None:
         permissions = discord.Permissions(administrator=True)
         invite_url = discord.utils.oauth_url(interaction.client.user.id, permissions=permissions)
         
